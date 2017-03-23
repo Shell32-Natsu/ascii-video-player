@@ -12,6 +12,7 @@ import getopt
 
 
 char_pixel_map = {
+    0:  ' ',
     2:  '`',
     4:  '\'.',
     6:  '-',
@@ -52,7 +53,7 @@ speed = 10
 def update_view(gray, y, x, block_height, block_width):
     avg_gray = numpy.mean([row[x:x + block_width] for row in gray[y:y + block_height]])
     keys = list(char_pixel_map.keys())
-    candidates = char_pixel_map[keys[int(numpy.power(avg_gray / 256, 1.4) * len(keys))]]
+    candidates = char_pixel_map[keys[int(numpy.power(avg_gray / 256, 1.25) * len(keys))]]
     ch = candidates[int(random.uniform(0, len(candidates)))]
     # print('{0}, {1}'.format(int(i / block_height) + 1, int(j / block_width) + 1))
     return ch
@@ -65,38 +66,44 @@ def update_view_callback(r):
 
 
 def print_image(stdscr, filename, shared_queue):
+    pause = False
     cap = cv2.VideoCapture(filename)
 
     frame_cnt = 0
     while cap.isOpened():
-        ret, frame = cap.read()
-        if ret and frame_cnt % speed == 0:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if not pause:
+            ret, frame = cap.read()
+            if ret and frame_cnt % speed == 0:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # cv2.imshow('frame', gray)
-            frame_height = len(gray)
-            frame_width = len(gray[0])
-            stdscr.addstr(0, 1, "[{2}] height: {0}, width: {1}".format(frame_height, frame_width, frame_cnt))
-            frame_cnt += 1
+                # cv2.imshow('frame', gray)
+                frame_height = len(gray)
+                frame_width = len(gray[0])
+                stdscr.addstr(0, 1, "[{2}] height: {0}, width: {1}".format(frame_height, frame_width, frame_cnt))
+                frame_cnt += 1
 
-            # Convert image data to characters
-            block_height = int(frame_height / show_height)
-            block_width = int(frame_width / show_width)
+                # Convert image data to characters
+                block_height = int(frame_height / show_height)
+                block_width = int(frame_width / show_width)
 
-            for i in range(0, frame_height, block_height):
-                for j in range(0, frame_width, block_width):
-                    ch = update_view(gray, i, j, block_height, block_width)
-                    y, x = int(i / block_height), int(j / block_width)
-                    if y < show_height - 2 and x < show_width - 2:
-                        stdscr.addch(y + 1, x + 1, ch)
+                for i in range(0, frame_height, block_height):
+                    for j in range(0, frame_width, block_width):
+                        ch = update_view(gray, i, j, block_height, block_width)
+                        y, x = int(i / block_height), int(j / block_width)
+                        if y < show_height - 2 and x < show_width - 2:
+                            stdscr.addch(y + 1, x + 1, ch)
 
-            stdscr.refresh()
-        else:
-            frame_cnt += 1
+                stdscr.refresh()
+            else:
+                frame_cnt += 1
 
         # Check data sent from parent thread
-        if shared_queue.qsize() > 0 and shared_queue.get() == -1:
-            break
+        if shared_queue.qsize() > 0:
+            command = shared_queue.get();
+            if command == 'stop':
+                break
+            elif command == 'pause':
+                pause = not pause
 
     cap.release()
 
@@ -128,9 +135,11 @@ def init_scr(stdscr):
         ch = stdscr.getch()
         if ch == ord('q'):
             # Ask child to terminate
-            shared_queue.put(-1)
+            shared_queue.put('stop')
             thread.join(2)
             break
+        elif ch == ord('p'):
+            shared_queue.put('pause')
 
 
 if __name__ == '__main__':
@@ -145,7 +154,8 @@ if __name__ == '__main__':
         sys.exit(1)
     for opt, arg in opts:
         if opt == '-h':
-            print('ascii_video.py -i <inputfile> [-s <speed>]\n-i: 指定输入视频文件\n-s: 播放速度, 与硬件性能有关, 默认为10, 数值越大越快\n运行中按q退出')
+            print('ascii_video.py -i <inputfile> [-s <speed>]\n-i: 指定输入视频文件\n' +
+                  '-s: 播放速度, 与硬件性能有关, 默认为10, 数值越大越快\n运行中按q退出, 按p暂停/恢复')
             sys.exit()
         elif opt == '-i':
             file_name = arg
