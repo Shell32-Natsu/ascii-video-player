@@ -2,7 +2,7 @@
 
 # 用法
 ```
-$ ./main.py -h
+$ ./ascii_video.py -h
 ascii_video.py -i <inputfile> [-s <speed>]
 -i: 指定输入视频文件
 -s: 播放速度, 与硬件性能有关, 默认为10, 数值越大越快
